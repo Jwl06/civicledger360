@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ethers } from 'ethers';
+import { ethers, BrowserProvider } from 'ethers';
 
 interface Web3ContextType {
   account: string | null;
-  provider: ethers.providers.Web3Provider | null;
+  provider: BrowserProvider | null;
   signer: ethers.Signer | null;
   isConnected: boolean;
   isOfficer: boolean;
@@ -31,7 +31,7 @@ const CONTRACT_ADDRESSES = {
 
 export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [account, setAccount] = useState<string | null>(null);
-  const [provider, setProvider] = useState<ethers.providers.Web3Provider | null>(null);
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isOfficer, setIsOfficer] = useState(false);
@@ -40,7 +40,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
   const connectWallet = async () => {
     try {
       if (typeof window.ethereum !== 'undefined') {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const provider = new BrowserProvider(window.ethereum);
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         
         const signer = provider.getSigner();
