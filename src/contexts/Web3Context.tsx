@@ -296,7 +296,621 @@ const CIVIC_TOKEN_ABI = [
 ];
 
 const VIOLATION_CHAIN_ABI = [
-  "function isOfficer(address) external view returns (bool)"
+  {
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_civicToken",
+						"type": "address"
+					},
+					{
+						"internalType": "address",
+						"name": "_vehicleLedger",
+						"type": "address"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "constructor"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "violationId",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "vehicleId",
+						"type": "uint256"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "amount",
+						"type": "uint256"
+					}
+				],
+				"name": "FineIssued",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "reporter",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "amount",
+						"type": "uint256"
+					}
+				],
+				"name": "RewardIssued",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "violationId",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "reporter",
+						"type": "address"
+					},
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "vehicleId",
+						"type": "uint256"
+					},
+					{
+						"indexed": false,
+						"internalType": "enum ViolationChain.ViolationType",
+						"name": "violationType",
+						"type": "uint8"
+					}
+				],
+				"name": "ViolationReported",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "violationId",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "reviewer",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "enum ViolationChain.ViolationStatus",
+						"name": "status",
+						"type": "uint8"
+					}
+				],
+				"name": "ViolationReviewed",
+				"type": "event"
+			},
+			{
+				"inputs": [],
+				"name": "REWARD_AMOUNT",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_officer",
+						"type": "address"
+					}
+				],
+				"name": "addOfficer",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "civicToken",
+				"outputs": [
+					{
+						"internalType": "contract CivicToken",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "fines",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "violationId",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "amount",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "dueDate",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "isPaid",
+						"type": "bool"
+					},
+					{
+						"internalType": "uint256",
+						"name": "paidDate",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "getPendingViolations",
+				"outputs": [
+					{
+						"internalType": "uint256[]",
+						"name": "",
+						"type": "uint256[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_user",
+						"type": "address"
+					}
+				],
+				"name": "getUserReports",
+				"outputs": [
+					{
+						"internalType": "uint256[]",
+						"name": "",
+						"type": "uint256[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "_vehicleId",
+						"type": "uint256"
+					}
+				],
+				"name": "getVehicleViolations",
+				"outputs": [
+					{
+						"internalType": "uint256[]",
+						"name": "",
+						"type": "uint256[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "_violationId",
+						"type": "uint256"
+					}
+				],
+				"name": "getViolation",
+				"outputs": [
+					{
+						"components": [
+							{
+								"internalType": "uint256",
+								"name": "id",
+								"type": "uint256"
+							},
+							{
+								"internalType": "address",
+								"name": "reporter",
+								"type": "address"
+							},
+							{
+								"internalType": "uint256",
+								"name": "vehicleId",
+								"type": "uint256"
+							},
+							{
+								"internalType": "enum ViolationChain.ViolationType",
+								"name": "violationType",
+								"type": "uint8"
+							},
+							{
+								"internalType": "string",
+								"name": "description",
+								"type": "string"
+							},
+							{
+								"internalType": "string",
+								"name": "ipfsHash",
+								"type": "string"
+							},
+							{
+								"internalType": "uint256",
+								"name": "timestamp",
+								"type": "uint256"
+							},
+							{
+								"internalType": "enum ViolationChain.ViolationStatus",
+								"name": "status",
+								"type": "uint8"
+							},
+							{
+								"internalType": "address",
+								"name": "reviewer",
+								"type": "address"
+							},
+							{
+								"internalType": "uint256",
+								"name": "reviewTimestamp",
+								"type": "uint256"
+							},
+							{
+								"internalType": "uint256",
+								"name": "fineAmount",
+								"type": "uint256"
+							},
+							{
+								"internalType": "bool",
+								"name": "isPaid",
+								"type": "bool"
+							}
+						],
+						"internalType": "struct ViolationChain.Violation",
+						"name": "",
+						"type": "tuple"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"name": "isOfficer",
+				"outputs": [
+					{
+						"internalType": "bool",
+						"name": "",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "owner",
+				"outputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "_violationId",
+						"type": "uint256"
+					}
+				],
+				"name": "payFine",
+				"outputs": [],
+				"stateMutability": "payable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_officer",
+						"type": "address"
+					}
+				],
+				"name": "removeOfficer",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "_vehicleId",
+						"type": "uint256"
+					},
+					{
+						"internalType": "enum ViolationChain.ViolationType",
+						"name": "_violationType",
+						"type": "uint8"
+					},
+					{
+						"internalType": "string",
+						"name": "_description",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "_ipfsHash",
+						"type": "string"
+					}
+				],
+				"name": "reportViolation",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "_violationId",
+						"type": "uint256"
+					},
+					{
+						"internalType": "enum ViolationChain.ViolationStatus",
+						"name": "_status",
+						"type": "uint8"
+					},
+					{
+						"internalType": "uint256",
+						"name": "_fineAmount",
+						"type": "uint256"
+					}
+				],
+				"name": "reviewViolation",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "userReports",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"name": "userRewards",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "vehicleLedger",
+				"outputs": [
+					{
+						"internalType": "contract VehicleLedger",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "vehicleViolations",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "violationCounter",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "violations",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "reporter",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "vehicleId",
+						"type": "uint256"
+					},
+					{
+						"internalType": "enum ViolationChain.ViolationType",
+						"name": "violationType",
+						"type": "uint8"
+					},
+					{
+						"internalType": "string",
+						"name": "description",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "ipfsHash",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "enum ViolationChain.ViolationStatus",
+						"name": "status",
+						"type": "uint8"
+					},
+					{
+						"internalType": "address",
+						"name": "reviewer",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "reviewTimestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "fineAmount",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "isPaid",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "withdraw",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
 ];
 
 interface Web3ContextType {
@@ -330,7 +944,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadTokenBalance = async (userAddress: string, provider: BrowserProvider) => {
     try {
-      if (CONTRACT_ADDRESSES.CIVIC_TOKEN === '0x0000000000000000000000000000000000000000') {
+      if (CONTRACT_ADDRESSES.CIVIC_TOKEN === '0x34683DAC607aF1e60f019552A672c33337133F64') {
         // Mock data if contracts not deployed
         setTokenBalance(Math.floor(Math.random() * 1000));
         return;
@@ -348,7 +962,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkOfficerStatus = async (userAddress: string, provider: BrowserProvider) => {
     try {
-      if (CONTRACT_ADDRESSES.VIOLATION_CHAIN === '0x0000000000000000000000000000000000000000') {
+      if (CONTRACT_ADDRESSES.VIOLATION_CHAIN === '0xf33bc070DC136064A2d438a5322a59EFfa5B88a4') {
         // Mock data if contracts not deployed
         setIsOfficer(userAddress.toLowerCase().includes('officer') || Math.random() > 0.8);
         return;
