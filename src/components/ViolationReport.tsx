@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { Camera, AlertTriangle, Upload, MapPin } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import { useWeb3 } from '../contexts/Web3Context';
 import { ViolationType } from '../types';
+import { greenfieldService } from '../services/greenfieldService';
+import { apiService } from '../services/apiService';
 
 const ViolationReport: React.FC = () => {
   const { userVehicles, reportViolation, isLoading } = useData();
+  const { account } = useWeb3();
   const [formData, setFormData] = useState({
     vehicleId: '',
     violationType: ViolationType.HELMET_VIOLATION,
@@ -14,6 +18,8 @@ const ViolationReport: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   const violationTypes = [
     { value: ViolationType.HELMET_VIOLATION, label: 'Helmet Violation', color: 'red' },
@@ -30,14 +36,40 @@ const ViolationReport: React.FC = () => {
       return;
     }
 
+    if (!account) {
+      alert('Please connect your wallet');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
     try {
+      let greenfieldUrl = '';
+      
+      // Upload evidence to Greenfield if file is selected
+      if (selectedFile) {
+        setUploadProgress(25);
+        const tempViolationId = `temp-${Date.now()}`;
+        greenfieldUrl = await greenfieldService.uploadViolationEvidence(
+          selectedFile,
+          tempViolationId,
+          account
+        );
+        setUploadProgress(50);
+      }
+
+      // Submit to blockchain
+      setUploadProgress(75);
       await reportViolation({
         vehicleId: parseInt(formData.vehicleId),
         violationType: formData.violationType,
         description: formData.description,
-        imageFile: selectedFile
+        imageFile: selectedFile,
+        greenfieldUrl
       });
       
+      setUploadProgress(100);
       setSuccess(true);
       setFormData({
         vehicleId: '',
@@ -50,6 +82,10 @@ const ViolationReport: React.FC = () => {
       setTimeout(() => setSuccess(false), 3000);
     } catch (error) {
       console.error('Report failed:', error);
+      alert('Failed to submit violation report. Please try again.');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -212,11 +248,30 @@ const ViolationReport: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">
                   Upload Evidence Photo/Video
                 </label>
+                {isUploading && (
+                  <div className="mt-2 mb-4">
+                    <div className="bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {uploadProgress < 50 ? 'Uploading to Greenfield...' : 
+                       uploadProgress < 75 ? 'Submitting to blockchain...' : 
+                       'Finalizing...'}
+                    </p>
+                  </div>
+                )}
                 <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-orange-400 transition-colors duration-200">
                   <div className="space-y-1 text-center">
                     {preview ? (
                       <div className="space-y-2">
-                        <img src={preview} alt="Preview" className="mx-auto h-32 w-32 object-cover rounded-lg" />
+                        {selectedFile?.type.startsWith('video/') ? (
+                          <video src={preview} className="mx-auto h-32 w-32 object-cover rounded-lg" controls />
+                        ) : (
+                          <img src={preview} alt="Preview" className="mx-auto h-32 w-32 object-cover rounded-lg" />
+                        )}
                         <div className="text-sm text-gray-600">
                           <label htmlFor="file-upload" className="cursor-pointer font-medium text-orange-600 hover:text-orange-500">
                             Change file
@@ -233,7 +288,7 @@ const ViolationReport: React.FC = () => {
                           <p className="pl-1">or drag and drop</p>
                         </div>
                         <p className="text-xs text-gray-500">
-                          PNG, JPG, GIF up to 10MB
+                          PNG, JPG, GIF, MP4, MOV up to 10MB
                         </p>
                       </>
                     )}
@@ -244,6 +299,7 @@ const ViolationReport: React.FC = () => {
                       className="sr-only"
                       accept="image/*,video/*"
                       onChange={handleFileChange}
+                      disabled={isUploading}
                     />
                   </div>
                 </div>
@@ -256,12 +312,12 @@ const ViolationReport: React.FC = () => {
                   </div>
                   <div className="ml-3">
                     <h3 className="text-sm font-medium text-yellow-800">
-                      Smart Detection
+                      Greenfield Storage & AI Analysis
                     </h3>
                     <div className="mt-2 text-sm text-yellow-700">
                       <p>
-                        Our AI will analyze your uploaded evidence for automatic violation detection.
-                        Valid reports are rewarded with CIVIC tokens after officer approval.
+                        Evidence is securely stored on BNB Greenfield and analyzed by AI for automatic 
+                        violation detection. Valid reports earn CIVIC tokens after officer approval.
                       </p>
                     </div>
                   </div>
@@ -293,13 +349,13 @@ const ViolationReport: React.FC = () => {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isUploading}
               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
-              {isLoading ? (
+              {isLoading || isUploading ? (
                 <>
                   <div className="animate-spin -ml-1 mr-3 h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                  Submitting...
+                  {isUploading ? 'Uploading...' : 'Submitting...'}
                 </>
               ) : (
                 <>

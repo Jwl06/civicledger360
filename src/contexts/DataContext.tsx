@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { Vehicle, Violation, ViolationType, ViolationStatus } from '../types';
 import { useWeb3 } from './Web3Context';
+import { apiService } from '../services/apiService';
 
 interface DataContextType {
   vehicles: Vehicle[];
@@ -1472,7 +1473,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const contract = getViolationChainContract();
       
       // Simulate IPFS hash (in real implementation, upload to IPFS first)
-      const ipfsHash = `QmX${Math.random().toString(36).substr(2, 9)}`;
+      const ipfsHash = violationData.greenfieldUrl || `QmX${Math.random().toString(36).substr(2, 9)}`;
 
       console.log('Reporting violation...');
       
@@ -1486,6 +1487,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Transaction sent:', tx.hash);
       const receipt = await tx.wait();
       console.log('Violation reported successfully:', receipt);
+
+      // Submit to backend API
+      try {
+        await apiService.submitViolation({
+          reporter: account,
+          vehicleId: violationData.vehicleId,
+          violationType: violationData.violationType,
+          description: violationData.description,
+          location: violationData.location || '',
+          greenfieldUrl: violationData.greenfieldUrl || '',
+          blockchainTxHash: tx.hash
+        });
+        console.log('Violation submitted to backend successfully');
+      } catch (backendError) {
+        console.error('Backend submission failed:', backendError);
+        // Don't throw error here as blockchain transaction succeeded
+      }
 
       // Refresh data after successful report
       await refreshData();
@@ -1567,6 +1585,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!account || !provider) return;
 
     try {
+      // Try to load from backend first
+      try {
+        const backendViolations = await apiService.getViolationsByReporter(account);
+        if (backendViolations.length > 0) {
+          const formattedViolations = backendViolations.map(v => ({
+            id: v.id,
+            reporter: v.reporter,
+            vehicleId: v.vehicleId,
+            violationType: v.violationType,
+            description: v.description,
+            ipfsHash: v.evidenceUrl || v.greenfieldUrl || '',
+            timestamp: v.timestamp,
+            status: v.status === 'pending' ? ViolationStatus.PENDING :
+                   v.status === 'approved' ? ViolationStatus.APPROVED :
+                   ViolationStatus.REJECTED,
+            reviewer: v.reviewer || '',
+            reviewTimestamp: v.reviewTimestamp || 0,
+            fineAmount: v.fineAmount || 0,
+            isPaid: v.isPaid || false
+          }));
+          setViolations(formattedViolations);
+          return;
+        }
+      } catch (backendError) {
+        console.log('Backend not available, falling back to blockchain');
+      }
+
+      // Fallback to blockchain data
       const contract = new ethers.Contract(CONTRACT_ADDRESSES.VIOLATION_CHAIN, VIOLATION_CHAIN_ABI, provider);
       const violationIds = await contract.getUserReports(account);
       
@@ -1599,6 +1645,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!provider) return;
 
     try {
+      // Try to load from backend first
+      try {
+        const backendViolations = await apiService.getPendingViolations();
+        if (backendViolations.length > 0) {
+          const formattedViolations = backendViolations.map(v => ({
+            id: v.id,
+            reporter: v.reporter,
+            vehicleId: v.vehicleId,
+            violationType: v.violationType,
+            description: v.description,
+            ipfsHash: v.evidenceUrl || v.greenfieldUrl || '',
+            timestamp: v.timestamp,
+            status: ViolationStatus.PENDING,
+            reviewer: '',
+            reviewTimestamp: 0,
+            fineAmount: 0,
+            isPaid: false
+          }));
+          
+          // Add pending violations to the violations array
+          setViolations(prev => {
+            const existingIds = new Set(prev.map(v => v.id));
+            const newViolations = formendViolations.filter(v => !existingIds.has(v.id));
+            return [...prev, ...newViolations];
+          });
+          return;
+        }
+      } catch (backendError) {
+        console.log('Backend not available, falling back to blockchain');
+      }
+
+      // Fallback to blockchain data
       const contract = new ethers.Contract(CONTRACT_ADDRESSES.VIOLATION_CHAIN, VIOLATION_CHAIN_ABI, provider);
       const pendingIds = await contract.getPendingViolations();
       

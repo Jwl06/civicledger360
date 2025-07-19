@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Camera, MapPin, User, DollarSign } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import { useWeb3 } from '../contexts/Web3Context';
 import { ViolationStatus, ViolationType } from '../types';
+import { apiService } from '../services/apiService';
 
 const ViolationReview: React.FC = () => {
   const { pendingViolations, reviewViolation, isLoading } = useData();
+  const { account } = useWeb3();
   const [selectedViolation, setSelectedViolation] = useState<number | null>(null);
   const [fineAmount, setFineAmount] = useState<number>(0);
+  const [reviewNotes, setReviewNotes] = useState<string>('');
+  const [backendViolations, setBackendViolations] = useState<any[]>([]);
 
   const violationTypeLabels = {
     [ViolationType.HELMET_VIOLATION]: 'Helmet Violation',
@@ -16,13 +21,50 @@ const ViolationReview: React.FC = () => {
     [ViolationType.OTHER]: 'Other'
   };
 
+  // Load violations from backend
+  React.useEffect(() => {
+    const loadBackendViolations = async () => {
+      try {
+        const violations = await apiService.getPendingViolations();
+        setBackendViolations(violations);
+      } catch (error) {
+        console.error('Error loading backend violations:', error);
+      }
+    };
+
+    loadBackendViolations();
+    const interval = setInterval(loadBackendViolations, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   const handleReview = async (violationId: number, status: ViolationStatus) => {
+    if (!account) {
+      alert('Please connect your wallet');
+      return;
+    }
+
     try {
+      // Update in backend first
+      await apiService.reviewViolation(violationId, {
+        status: status === ViolationStatus.APPROVED ? 'approved' : 'rejected',
+        reviewer: account,
+        fineAmount: status === ViolationStatus.APPROVED ? fineAmount : 0,
+        reviewNotes
+      });
+
+      // Then update blockchain
       await reviewViolation(violationId, status, status === ViolationStatus.APPROVED ? fineAmount : 0);
+      
       setSelectedViolation(null);
       setFineAmount(0);
+      setReviewNotes('');
+      
+      // Refresh backend violations
+      const updatedViolations = await apiService.getPendingViolations();
+      setBackendViolations(updatedViolations);
     } catch (error) {
       console.error('Review failed:', error);
+      alert('Failed to review violation. Please try again.');
     }
   };
 
@@ -34,6 +76,29 @@ const ViolationReview: React.FC = () => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  // Combine blockchain and backend violations
+  const allPendingViolations = [
+    ...pendingViolations,
+    ...backendViolations.filter(bv => 
+      !pendingViolations.some(pv => pv.id === bv.id)
+    ).map(bv => ({
+      id: bv.id,
+      reporter: bv.reporter,
+      vehicleId: bv.vehicleId,
+      violationType: bv.violationType,
+      description: bv.description,
+      ipfsHash: bv.evidenceUrl || bv.greenfieldUrl || '',
+      timestamp: bv.timestamp,
+      status: ViolationStatus.PENDING,
+      reviewer: '',
+      reviewTimestamp: 0,
+      fineAmount: 0,
+      isPaid: false,
+      location: bv.location,
+      aiAnalysis: bv.aiAnalysis
+    }))
+  ];
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -43,7 +108,7 @@ const ViolationReview: React.FC = () => {
         </p>
       </div>
 
-      {pendingViolations.length === 0 ? (
+      {allPendingViolations.length === 0 ? (
         <div className="bg-white shadow rounded-lg p-8 text-center">
           <Clock className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No pending violations</h3>
@@ -53,7 +118,7 @@ const ViolationReview: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {pendingViolations.map((violation) => (
+          {allPendingViolations.map((violation) => (
             <div key={violation.id} className="bg-white shadow-lg rounded-lg overflow-hidden">
               <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-4">
                 <div className="flex items-center justify-between">
@@ -90,6 +155,13 @@ const ViolationReview: React.FC = () => {
                     <span>Reported: {formatDate(violation.timestamp)}</span>
                   </div>
 
+                  {violation.location && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      <span>Location: {violation.location}</span>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Description:
@@ -99,10 +171,28 @@ const ViolationReview: React.FC = () => {
                     </p>
                   </div>
 
+                  {violation.aiAnalysis && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                      <h4 className="text-sm font-medium text-blue-800 mb-2">AI Analysis</h4>
+                      <p className="text-sm text-blue-700">{violation.aiAnalysis.description}</p>
+                      <div className="mt-2 flex items-center justify-between text-xs text-blue-600">
+                        <span>Confidence: {(violation.aiAnalysis.confidence * 100).toFixed(1)}%</span>
+                        <span>Risk: {violation.aiAnalysis.riskLevel}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {violation.ipfsHash && (
                     <div className="flex items-center text-sm text-gray-600">
                       <Camera className="h-4 w-4 mr-1" />
-                      <span>Evidence: {violation.ipfsHash}</span>
+                      <a 
+                        href={violation.ipfsHash} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 underline"
+                      >
+                        View Evidence
+                      </a>
                     </div>
                   )}
 
@@ -128,6 +218,20 @@ const ViolationReview: React.FC = () => {
                         </div>
                       </div>
 
+                      <div>
+                        <label htmlFor={`notes-${violation.id}`} className="block text-sm font-medium text-gray-700">
+                          Review Notes (Optional)
+                        </label>
+                        <textarea
+                          id={`notes-${violation.id}`}
+                          value={reviewNotes}
+                          onChange={(e) => setReviewNotes(e.target.value)}
+                          rows={3}
+                          className="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                          placeholder="Add any notes about your decision..."
+                        />
+                      </div>
+
                       <div className="flex space-x-3">
                         <button
                           onClick={() => handleReview(violation.id, ViolationStatus.APPROVED)}
@@ -147,7 +251,11 @@ const ViolationReview: React.FC = () => {
                         </button>
                       </div>
                       <button
-                        onClick={() => setSelectedViolation(null)}
+                        onClick={() => {
+                          setSelectedViolation(null);
+                          setFineAmount(0);
+                          setReviewNotes('');
+                        }}
                         className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
                       >
                         Cancel
