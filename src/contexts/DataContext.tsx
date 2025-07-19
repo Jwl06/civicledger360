@@ -1647,7 +1647,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Try to load from backend first
       try {
+        console.log('Loading pending violations from backend...');
         const backendViolations = await apiService.getPendingViolations();
+        console.log('Backend violations loaded:', backendViolations.length);
         if (backendViolations.length > 0) {
           const formattedViolations = backendViolations.map(v => ({
             id: v.id,
@@ -1667,7 +1669,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Add pending violations to the violations array
           setViolations(prev => {
             const existingIds = new Set(prev.map(v => v.id));
-            const newViolations = formendViolations.filter(v => !existingIds.has(v.id));
+            const newViolations = formattedViolations.filter(v => !existingIds.has(v.id));
             return [...prev, ...newViolations];
           });
           return;
