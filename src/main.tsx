@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { Buffer } from 'buffer';
 import process from 'process';
+import React from 'react'; // ← Required for JSX (unless automatic runtime is configured)
 
 window.Buffer = Buffer;
 window.process = process;
