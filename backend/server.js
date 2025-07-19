@@ -1,67 +1,70 @@
 const express = require('express');
 const cors = require('cors');
-const multer = require('multer');
-require('dotenv').config();
+const bodyParser = require('body-parser');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// In-memory storage for violations (replace with database in production)
+// In-memory storage (replace with database in production)
 let violations = [];
-let violationIdCounter = 1;
+let vehicles = [];
 
-// Multer configuration for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
-});
-
-// Helper function to generate AI analysis
-const generateAIAnalysis = (violationType, description) => {
-  const confidenceBase = Math.random() * 0.4 + 0.6; // 60-100% confidence
-  const detectionTypes = {
-    0: 'Helmet not detected on rider',
-    1: 'License plate tampering detected',
-    2: 'Speed limit violation detected',
-    3: 'Illegal parking detected',
-    4: 'Traffic rule violation detected'
+// Mock AI analysis function
+function generateAIAnalysis(violationType, description, evidenceUrl) {
+  const analyses = {
+    'illegal-parking': {
+      analysis: 'Vehicle appears to be parked in a no-parking zone. Clear violation of parking regulations.',
+      confidence: 0.92,
+      details: ['No parking sign visible', 'Vehicle blocking traffic flow', 'Clear license plate visible']
+    },
+    'speeding': {
+      analysis: 'Speed camera detected vehicle exceeding speed limit by significant margin.',
+      confidence: 0.88,
+      details: ['Speed: 65 mph in 35 mph zone', 'Clear weather conditions', 'No emergency situation evident']
+    },
+    'traffic-light': {
+      analysis: 'Vehicle crossed intersection during red light phase.',
+      confidence: 0.95,
+      details: ['Red light clearly visible', 'Vehicle in intersection', 'No pedestrians in crosswalk']
+    },
+    'other': {
+      analysis: 'Manual review required for this violation type.',
+      confidence: 0.75,
+      details: ['Custom violation reported', 'Evidence requires human assessment']
+    }
   };
 
-  return {
-    confidence: confidenceBase,
-    detectedViolation: detectionTypes[violationType] || 'Violation detected',
-    vehicleDetected: true,
-    locationVerified: true,
-    riskLevel: confidenceBase > 0.8 ? 'High' : confidenceBase > 0.6 ? 'Medium' : 'Low',
-    timestamp: new Date().toISOString(),
-    description: `AI detected ${detectionTypes[violationType]} with ${(confidenceBase * 100).toFixed(1)}% confidence`
-  };
-};
+  return analyses[violationType] || analyses['other'];
+}
 
 // Routes
 
-// Get all violations with optional filters
+// Get all violations
 app.get('/api/violations', (req, res) => {
   try {
-    const { status, reporter } = req.query;
-    let filteredViolations = violations;
+    const { status, type, limit } = req.query;
+    let filteredViolations = [...violations];
 
     if (status) {
       filteredViolations = filteredViolations.filter(v => v.status === status);
     }
 
-    if (reporter) {
-      filteredViolations = filteredViolations.filter(v => 
-        v.reporterAddress && v.reporterAddress.toLowerCase() === reporter.toLowerCase()
-      );
+    if (type) {
+      filteredViolations = filteredViolations.filter(v => v.type === type);
     }
+
+    if (limit) {
+      filteredViolations = filteredViolations.slice(0, parseInt(limit));
+    }
+
+    // Sort by creation date (newest first)
+    filteredViolations.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.json({
       success: true,
@@ -69,7 +72,6 @@ app.get('/api/violations', (req, res) => {
       total: filteredViolations.length
     });
   } catch (error) {
-    console.error('Error fetching violations:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch violations'
@@ -77,88 +79,54 @@ app.get('/api/violations', (req, res) => {
   }
 });
 
-// Get violation by ID
-app.get('/api/violations/:id', (req, res) => {
-  try {
-    const violation = violations.find(v => v.id === parseInt(req.params.id));
-    if (!violation) {
-      return res.status(404).json({
-        success: false,
-        error: 'Violation not found'
-      });
-    }
-    res.json({
-      success: true,
-      data: violation
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch violation'
-    });
-  }
-});
-
 // Submit new violation
-app.post('/api/violations', upload.single('evidence'), (req, res) => {
+app.post('/api/violations', (req, res) => {
   try {
     const {
-      reporter,
-      vehicleId,
-      violationType,
+      type,
       description,
       location,
-      greenfieldUrl,
-      blockchainTxHash
+      vehicleNumber,
+      evidenceUrl,
+      reporterAddress,
+      timestamp
     } = req.body;
 
-    // Validate required fields
-    if (!reporter || !vehicleId || violationType === undefined || !description) {
+    // Validation
+    if (!type || !description || !location || !vehicleNumber || !evidenceUrl) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: reporter, vehicleId, violationType, description'
+        error: 'Missing required fields'
       });
     }
 
     // Generate AI analysis
-    const aiAnalysis = generateAIAnalysis(parseInt(violationType), description);
+    const aiAnalysis = generateAIAnalysis(type, description, evidenceUrl);
 
-    const newViolation = {
-      id: violationIdCounter++,
-      reporterAddress: reporter,
-      vehicleId: parseInt(vehicleId),
-      violationType: parseInt(violationType),
+    // Create new violation
+    const violation = {
+      id: uuidv4(),
+      type,
       description,
-      location: location || '',
-      greenfieldUrl: greenfieldUrl || '',
-      blockchainTxHash: blockchainTxHash || '',
-      aiAnalysis,
+      location,
+      vehicleNumber,
+      evidenceUrl,
+      reporterAddress,
+      timestamp: timestamp || new Date().toISOString(),
       status: 'pending',
-      submittedAt: new Date().toISOString(),
-      reviewedAt: null,
-      reviewedBy: null,
-      reviewNotes: null,
-      fineAmount: 0,
-      isPaid: false,
-      timestamp: Date.now()
+      aiAnalysis,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    violations.push(newViolation);
-
-    console.log('New violation submitted:', {
-      id: newViolation.id,
-      reporter: newViolation.reporterAddress,
-      type: newViolation.violationType,
-      hasEvidence: !!newViolation.greenfieldUrl
-    });
+    violations.push(violation);
 
     res.status(201).json({
       success: true,
-      data: newViolation,
+      data: violation,
       message: 'Violation submitted successfully'
     });
   } catch (error) {
-    console.error('Error submitting violation:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to submit violation'
@@ -166,12 +134,14 @@ app.post('/api/violations', upload.single('evidence'), (req, res) => {
   }
 });
 
-// Update violation status (for officer review)
-app.put('/api/violations/:id/review', (req, res) => {
+// Update violation status (for officers)
+app.put('/api/violations/:id', (req, res) => {
   try {
-    const { status, reviewNotes, reviewer, fineAmount } = req.body;
-    const violationIndex = violations.findIndex(v => v.id === parseInt(req.params.id));
+    const { id } = req.params;
+    const { status, fine, notes, officerAddress } = req.body;
 
+    const violationIndex = violations.findIndex(v => v.id === id);
+    
     if (violationIndex === -1) {
       return res.status(404).json({
         success: false,
@@ -179,40 +149,26 @@ app.put('/api/violations/:id/review', (req, res) => {
       });
     }
 
-    // Validate status
-    if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Status must be either "approved" or "rejected"'
-      });
-    }
-
+    // Update violation
     violations[violationIndex] = {
       ...violations[violationIndex],
       status,
-      reviewNotes: reviewNotes || '',
-      reviewedBy: reviewer,
+      fine,
+      notes,
+      officerAddress,
       reviewedAt: new Date().toISOString(),
-      fineAmount: status === 'approved' ? (fineAmount || 0) : 0
+      updatedAt: new Date().toISOString()
     };
-
-    console.log('Violation reviewed:', {
-      id: violations[violationIndex].id,
-      status,
-      reviewer,
-      fineAmount: violations[violationIndex].fineAmount
-    });
 
     res.json({
       success: true,
       data: violations[violationIndex],
-      message: 'Violation reviewed successfully'
+      message: 'Violation updated successfully'
     });
   } catch (error) {
-    console.error('Error reviewing violation:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to review violation'
+      error: 'Failed to update violation'
     });
   }
 });
@@ -225,18 +181,9 @@ app.get('/api/statistics', (req, res) => {
       pending: violations.filter(v => v.status === 'pending').length,
       approved: violations.filter(v => v.status === 'approved').length,
       rejected: violations.filter(v => v.status === 'rejected').length,
-      avgConfidence: violations.length > 0 
-        ? violations.reduce((sum, v) => sum + (v.aiAnalysis?.confidence || 0), 0) / violations.length 
-        : 0,
       totalFines: violations
-        .filter(v => v.status === 'approved')
-        .reduce((sum, v) => sum + (v.fineAmount || 0), 0),
-      recentSubmissions: violations
-        .filter(v => {
-          const submittedAt = new Date(v.submittedAt);
-          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          return submittedAt > oneDayAgo;
-        }).length
+        .filter(v => v.status === 'approved' && v.fine)
+        .reduce((sum, v) => sum + parseFloat(v.fine || 0), 0)
     };
 
     res.json({
@@ -251,30 +198,53 @@ app.get('/api/statistics', (req, res) => {
   }
 });
 
-// Upload evidence file (for direct file uploads)
-app.post('/api/upload', upload.single('evidence'), (req, res) => {
+// Register vehicle
+app.post('/api/vehicles', (req, res) => {
   try {
-    if (!req.file) {
+    const { vehicleNumber, ownerAddress, vehicleType, model } = req.body;
+
+    if (!vehicleNumber || !ownerAddress) {
       return res.status(400).json({
         success: false,
-        error: 'No file uploaded'
+        error: 'Vehicle number and owner address are required'
       });
     }
 
-    // In production, upload to actual storage service
-    const fileUrl = `http://localhost:${PORT}/uploads/${req.file.originalname}`;
-    
-    res.json({
+    const vehicle = {
+      id: uuidv4(),
+      vehicleNumber,
+      ownerAddress,
+      vehicleType,
+      model,
+      registeredAt: new Date().toISOString()
+    };
+
+    vehicles.push(vehicle);
+
+    res.status(201).json({
       success: true,
-      url: fileUrl,
-      filename: req.file.originalname,
-      size: req.file.size
+      data: vehicle,
+      message: 'Vehicle registered successfully'
     });
   } catch (error) {
-    console.error('Error uploading file:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to upload file'
+      error: 'Failed to register vehicle'
+    });
+  }
+});
+
+// Get vehicles
+app.get('/api/vehicles', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: vehicles
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch vehicles'
     });
   }
 });
@@ -282,72 +252,17 @@ app.post('/api/upload', upload.single('evidence'), (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   res.json({
-    success: true,
-    message: 'Backend server is running',
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    violations: violations.length
+    uptime: process.uptime()
   });
 });
 
-// Get violations by reporter
-app.get('/api/violations/reporter/:address', (req, res) => {
-  try {
-    const reporterAddress = req.params.address.toLowerCase();
-    const userViolations = violations.filter(v => 
-      v.reporterAddress && v.reporterAddress.toLowerCase() === reporterAddress
-    );
-
-    res.json({
-      success: true,
-      data: userViolations,
-      total: userViolations.length
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch user violations'
-    });
-  }
-});
-
-// Get pending violations
-app.get('/api/violations/status/pending', (req, res) => {
-  try {
-    const pendingViolations = violations.filter(v => v.status === 'pending');
-    
-    res.json({
-      success: true,
-      data: pendingViolations,
-      total: pendingViolations.length
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch pending violations'
-    });
-  }
-});
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error'
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found'
-  });
-});
-
+// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`🚀 Civic Violation Backend running on port ${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
-  console.log(`🔍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📝 Total violations in memory: ${violations.length}`);
+  console.log(`❤️  Health check: http://localhost:${PORT}/health`);
 });
+
+module.exports = app;
