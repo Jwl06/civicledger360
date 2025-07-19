@@ -14,6 +14,15 @@
 - **Currency Symbol**: tBNB
 - **Block Explorer**: https://testnet.bscscan.com/
 
+### MetaMask Network Setup
+The application will automatically prompt you to add BSC Testnet to MetaMask when you connect your wallet. If you need to add it manually:
+
+1. Open MetaMask
+2. Click on the network dropdown (usually shows "Ethereum Mainnet")
+3. Click "Add Network" or "Custom RPC"
+4. Enter the configuration details above
+5. Click "Save"
+
 ### Deployment Steps
 
 #### 1. Deploy CivicToken.sol

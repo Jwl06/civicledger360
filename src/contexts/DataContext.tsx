@@ -1417,6 +1417,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Wallet not connected');
     }
 
+    // Verify network before transaction
+    const network = await provider?.getNetwork();
+    if (network?.chainId !== 97n) {
+      throw new Error('Please switch to BSC Testnet (Chain ID: 97) to perform transactions');
+    }
+
     setIsLoading(true);
     try {
       const contract = getVehicleLedgerContract();
@@ -1455,6 +1461,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Wallet not connected');
     }
 
+    // Verify network before transaction
+    const network = await provider?.getNetwork();
+    if (network?.chainId !== 97n) {
+      throw new Error('Please switch to BSC Testnet (Chain ID: 97) to perform transactions');
+    }
+
     setIsLoading(true);
     try {
       const contract = getViolationChainContract();
@@ -1488,6 +1500,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const reviewViolation = async (violationId: number, status: ViolationStatus, fineAmount: number) => {
     if (!account || !signer) {
       throw new Error('Wallet not connected');
+    }
+
+    // Verify network before transaction
+    const network = await provider?.getNetwork();
+    if (network?.chainId !== 97n) {
+      throw new Error('Please switch to BSC Testnet (Chain ID: 97) to perform transactions');
     }
 
     setIsLoading(true);

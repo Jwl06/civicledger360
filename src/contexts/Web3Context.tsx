@@ -1,6 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ethers, BrowserProvider } from 'ethers';
 
+// BNB Smart Chain Testnet Configuration
+const BSC_TESTNET_CONFIG = {
+  chainId: '0x61', // 97 in decimal
+  chainName: 'BSC Testnet',
+  nativeCurrency: {
+    name: 'tBNB',
+    symbol: 'tBNB',
+    decimals: 18,
+  },
+  rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
+  blockExplorerUrls: ['https://testnet.bscscan.com/'],
+};
+
 // Contract addresses - UPDATE THESE AFTER DEPLOYMENT
 const CONTRACT_ADDRESSES = {
   CIVIC_TOKEN: '0x34683DAC607aF1e60f019552A672c33337133F64', // Update with deployed address
@@ -977,11 +990,51 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const switchToBSCTestnet = async () => {
+    try {
+      // Try to switch to BSC Testnet
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: BSC_TESTNET_CONFIG.chainId }],
+      });
+    } catch (switchError: any) {
+      // This error code indicates that the chain has not been added to MetaMask
+      if (switchError.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [BSC_TESTNET_CONFIG],
+          });
+        } catch (addError) {
+          console.error('Error adding BSC Testnet:', addError);
+          throw new Error('Failed to add BSC Testnet to MetaMask');
+        }
+      } else {
+        console.error('Error switching to BSC Testnet:', switchError);
+        throw new Error('Failed to switch to BSC Testnet');
+      }
+    }
+  };
+
+  const checkNetwork = async (provider: BrowserProvider) => {
+    const network = await provider.getNetwork();
+    if (network.chainId !== 97n) { // 97 is BSC Testnet chain ID
+      throw new Error('Please switch to BSC Testnet (Chain ID: 97)');
+    }
+  };
+
   const connectWallet = async () => {
     try {
       if (typeof window.ethereum !== 'undefined') {
+        // First, try to switch to BSC Testnet
+        await switchToBSCTestnet();
+        
         // Request account access
         const provider = new BrowserProvider(window.ethereum);
+        
+        // Verify we're on the correct network
+        await checkNetwork(provider);
+        
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         
         if (accounts.length === 0) {
@@ -1002,10 +1055,13 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
 
         console.log('Wallet connected successfully:', accounts[0]);
       } else {
-        alert('Please install MetaMask!');
+        alert('Please install MetaMask to use this application!');
       }
     } catch (error) {
       console.error('Error connecting wallet:', error);
+      if (error instanceof Error) {
+        alert(`Connection failed: ${error.message}`);
+      }
     }
   };
 

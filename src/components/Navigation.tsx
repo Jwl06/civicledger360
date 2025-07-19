@@ -10,6 +10,30 @@ interface NavigationProps {
 const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView }) => {
   const { account, isConnected, isOfficer, tokenBalance, connectWallet, disconnectWallet } = useWeb3();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [networkStatus, setNetworkStatus] = React.useState<'correct' | 'wrong' | 'checking'>('checking');
+
+  // Check network status
+  React.useEffect(() => {
+    const checkNetwork = async () => {
+      if (typeof window.ethereum !== 'undefined' && isConnected) {
+        try {
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          setNetworkStatus(chainId === '0x61' ? 'correct' : 'wrong'); // 0x61 = 97 (BSC Testnet)
+        } catch (error) {
+          console.error('Error checking network:', error);
+          setNetworkStatus('wrong');
+        }
+      }
+    };
+
+    checkNetwork();
+
+    // Listen for network changes
+    if (typeof window.ethereum !== 'undefined') {
+      window.ethereum.on('chainChanged', checkNetwork);
+      return () => window.ethereum.removeListener('chainChanged', checkNetwork);
+    }
+  }, [isConnected]);
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -58,6 +82,18 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView }) 
           <div className="flex items-center">
             {isConnected ? (
               <>
+                {networkStatus === 'wrong' && (
+                  <div className="hidden md:flex items-center bg-red-50 px-3 py-1 rounded-full mr-4">
+                    <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                    <span className="text-sm font-medium text-red-800">Wrong Network</span>
+                  </div>
+                )}
+                {networkStatus === 'correct' && (
+                  <div className="hidden md:flex items-center bg-green-50 px-3 py-1 rounded-full mr-4">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <span className="text-sm font-medium text-green-800">BSC Testnet</span>
+                  </div>
+                )}
                 <div className="hidden md:flex items-center space-x-4">
                   <div className="flex items-center bg-green-50 px-3 py-1 rounded-full">
                     <Wallet className="h-4 w-4 text-green-600 mr-1" />
@@ -120,6 +156,18 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setCurrentView }) 
             ))}
             
             <div className="border-t border-gray-200 pt-4 pb-2">
+              {networkStatus === 'wrong' && (
+                <div className="flex items-center bg-red-50 px-3 py-1 rounded-full mb-2">
+                  <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                  <span className="text-sm font-medium text-red-800">Please switch to BSC Testnet</span>
+                </div>
+              )}
+              {networkStatus === 'correct' && (
+                <div className="flex items-center bg-green-50 px-3 py-1 rounded-full mb-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  <span className="text-sm font-medium text-green-800">BSC Testnet Connected</span>
+                </div>
+              )}
               <div className="flex items-center justify-between px-3 py-2">
                 <div className="flex items-center bg-green-50 px-3 py-1 rounded-full">
                   <Wallet className="h-4 w-4 text-green-600 mr-1" />
