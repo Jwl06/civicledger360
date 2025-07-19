@@ -1,24 +1,10 @@
 import { defineConfig } from 'vite';
-import rollupNodePolyFill from 'rollup-plugin-node-polyfills';
+import react from '@vitejs/plugin-react';
 
+// https://vitejs.dev/config/
 export default defineConfig({
-  define: {
-    global: {},
-    'process.env': {},
-  },
-  resolve: {
-    alias: {
-      events: 'events',
-      stream: 'stream-browserify',
-      util: 'util',
-    },
-  },
+  plugins: [react()],
   optimizeDeps: {
-    include: ['buffer', 'process', 'events', 'util', 'stream-browserify'],
-  },
-  build: {
-    rollupOptions: {
-      plugins: [rollupNodePolyFill()],
-    },
-  },
+    exclude: ['lucide-react'],
+  },
 });
