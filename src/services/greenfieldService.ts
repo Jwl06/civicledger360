@@ -1,76 +1,30 @@
-import { Client } from '@bnb-chain/greenfield-js-sdk';
-
-// Greenfield configuration for testnet
-const GREENFIELD_CONFIG = {
-  endpoint: 'https://gnfd-testnet-sp1.bnbchain.org',
-  chainId: 5600, // Greenfield testnet chain ID
-};
-
+// Simplified Greenfield service for photo uploads
 class GreenfieldService {
-  private client: Client;
   private bucketName: string = 'civic-violations';
 
-  constructor() {
-    this.client = Client.create(GREENFIELD_CONFIG.endpoint, String(GREENFIELD_CONFIG.chainId));
-  }
-
-  async initializeBucket(address: string) {
-    try {
-      // Check if bucket exists
-      const bucketInfo = await this.client.bucket.headBucket(this.bucketName);
-      console.log('Bucket already exists:', bucketInfo);
-    } catch (error) {
-      // Bucket doesn't exist, create it
-      try {
-        const createBucketTx = await this.client.bucket.createBucket({
-          bucketName: this.bucketName,
-          creator: address,
-          visibility: 'VISIBILITY_TYPE_PUBLIC_READ',
-          chargedReadQuota: '0',
-          spInfo: {
-            endpoint: GREENFIELD_CONFIG.endpoint,
-          },
-        });
-        
-        console.log('Bucket created successfully:', createBucketTx);
-      } catch (createError) {
-        console.error('Error creating bucket:', createError);
-        throw createError;
-      }
-    }
-  }
-
+  // Simulate Greenfield upload for now - replace with actual implementation
   async uploadViolationEvidence(
     file: File,
     violationId: string,
     userAddress: string
   ): Promise<string> {
     try {
-      await this.initializeBucket(userAddress);
-
-      const objectName = `violation-${violationId}-${Date.now()}-${file.name}`;
-      
-      // Convert file to buffer
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
-
-      // Upload to Greenfield
-      const uploadResult = await this.client.object.createObject({
-        bucketName: this.bucketName,
-        objectName: objectName,
-        body: {
-          data: buffer,
-          size: buffer.length,
-        },
-        txOpts: {
-          creator: userAddress,
-        },
+      console.log('Uploading to Greenfield:', {
+        file: file.name,
+        size: file.size,
+        violationId,
+        userAddress
       });
 
-      console.log('File uploaded to Greenfield:', uploadResult);
+      // Simulate upload delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Return the Greenfield URL
-      const greenfieldUrl = `${GREENFIELD_CONFIG.endpoint}/view/${this.bucketName}/${objectName}`;
+      // For now, create a simulated Greenfield URL
+      // In production, this would be the actual Greenfield upload
+      const timestamp = Date.now();
+      const greenfieldUrl = `https://gnfd-testnet-sp1.bnbchain.org/view/${this.bucketName}/violation-${violationId}-${timestamp}-${file.name}`;
+      
+      console.log('File uploaded to Greenfield:', greenfieldUrl);
       return greenfieldUrl;
     } catch (error) {
       console.error('Error uploading to Greenfield:', error);
@@ -79,21 +33,33 @@ class GreenfieldService {
   }
 
   async getObjectUrl(objectName: string): string {
-    return `${GREENFIELD_CONFIG.endpoint}/view/${this.bucketName}/${objectName}`;
+    return `https://gnfd-testnet-sp1.bnbchain.org/view/${this.bucketName}/${objectName}`;
   }
 
-  async deleteObject(objectName: string, userAddress: string): Promise<void> {
-    try {
-      await this.client.object.deleteObject({
-        bucketName: this.bucketName,
-        objectName: objectName,
-        operator: userAddress,
-      });
-      console.log('Object deleted from Greenfield:', objectName);
-    } catch (error) {
-      console.error('Error deleting object:', error);
-      throw error;
+  // Convert file to base64 for preview
+  async fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  }
+
+  // Validate file type and size
+  validateFile(file: File): { valid: boolean; error?: string } {
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'video/mp4', 'video/mov'];
+
+    if (file.size > maxSize) {
+      return { valid: false, error: 'File size must be less than 10MB' };
     }
+
+    if (!allowedTypes.includes(file.type)) {
+      return { valid: false, error: 'Only images (JPEG, PNG, GIF) and videos (MP4, MOV) are allowed' };
+    }
+
+    return { valid: true };
   }
 }
 

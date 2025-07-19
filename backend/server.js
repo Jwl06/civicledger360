@@ -23,17 +23,53 @@ const upload = multer({
   }
 });
 
+// Helper function to generate AI analysis
+const generateAIAnalysis = (violationType, description) => {
+  const confidenceBase = Math.random() * 0.4 + 0.6; // 60-100% confidence
+  const detectionTypes = {
+    0: 'Helmet not detected on rider',
+    1: 'License plate tampering detected',
+    2: 'Speed limit violation detected',
+    3: 'Illegal parking detected',
+    4: 'Traffic rule violation detected'
+  };
+
+  return {
+    confidence: confidenceBase,
+    detectedViolation: detectionTypes[violationType] || 'Violation detected',
+    vehicleDetected: true,
+    locationVerified: true,
+    riskLevel: confidenceBase > 0.8 ? 'High' : confidenceBase > 0.6 ? 'Medium' : 'Low',
+    timestamp: new Date().toISOString(),
+    description: `AI detected ${detectionTypes[violationType]} with ${(confidenceBase * 100).toFixed(1)}% confidence`
+  };
+};
+
 // Routes
 
-// Get all violations
+// Get all violations with optional filters
 app.get('/api/violations', (req, res) => {
   try {
+    const { status, reporter } = req.query;
+    let filteredViolations = violations;
+
+    if (status) {
+      filteredViolations = filteredViolations.filter(v => v.status === status);
+    }
+
+    if (reporter) {
+      filteredViolations = filteredViolations.filter(v => 
+        v.reporterAddress && v.reporterAddress.toLowerCase() === reporter.toLowerCase()
+      );
+    }
+
     res.json({
       success: true,
-      data: violations,
-      total: violations.length
+      data: filteredViolations,
+      total: filteredViolations.length
     });
   } catch (error) {
+    console.error('Error fetching violations:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch violations'
@@ -67,42 +103,54 @@ app.get('/api/violations/:id', (req, res) => {
 app.post('/api/violations', upload.single('evidence'), (req, res) => {
   try {
     const {
-      vehicleNumber,
+      reporter,
+      vehicleId,
       violationType,
-      location,
       description,
-      reporterAddress,
+      location,
       greenfieldUrl,
       blockchainTxHash
     } = req.body;
 
-    // Simulate AI analysis
-    const aiAnalysis = {
-      confidence: Math.random() * 0.4 + 0.6, // 60-100% confidence
-      detectedViolation: violationType,
-      vehicleDetected: true,
-      locationVerified: true,
-      timestamp: new Date().toISOString()
-    };
+    // Validate required fields
+    if (!reporter || !vehicleId || violationType === undefined || !description) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: reporter, vehicleId, violationType, description'
+      });
+    }
+
+    // Generate AI analysis
+    const aiAnalysis = generateAIAnalysis(parseInt(violationType), description);
 
     const newViolation = {
       id: violationIdCounter++,
-      vehicleNumber,
-      violationType,
-      location,
+      reporterAddress: reporter,
+      vehicleId: parseInt(vehicleId),
+      violationType: parseInt(violationType),
       description,
-      reporterAddress,
-      greenfieldUrl,
-      blockchainTxHash,
+      location: location || '',
+      greenfieldUrl: greenfieldUrl || '',
+      blockchainTxHash: blockchainTxHash || '',
       aiAnalysis,
       status: 'pending',
       submittedAt: new Date().toISOString(),
       reviewedAt: null,
       reviewedBy: null,
-      reviewNotes: null
+      reviewNotes: null,
+      fineAmount: 0,
+      isPaid: false,
+      timestamp: Date.now()
     };
 
     violations.push(newViolation);
+
+    console.log('New violation submitted:', {
+      id: newViolation.id,
+      reporter: newViolation.reporterAddress,
+      type: newViolation.violationType,
+      hasEvidence: !!newViolation.greenfieldUrl
+    });
 
     res.status(201).json({
       success: true,
@@ -121,7 +169,7 @@ app.post('/api/violations', upload.single('evidence'), (req, res) => {
 // Update violation status (for officer review)
 app.put('/api/violations/:id/review', (req, res) => {
   try {
-    const { status, reviewNotes, reviewerAddress } = req.body;
+    const { status, reviewNotes, reviewer, fineAmount } = req.body;
     const violationIndex = violations.findIndex(v => v.id === parseInt(req.params.id));
 
     if (violationIndex === -1) {
@@ -131,13 +179,29 @@ app.put('/api/violations/:id/review', (req, res) => {
       });
     }
 
+    // Validate status
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Status must be either "approved" or "rejected"'
+      });
+    }
+
     violations[violationIndex] = {
       ...violations[violationIndex],
       status,
-      reviewNotes,
-      reviewedBy: reviewerAddress,
-      reviewedAt: new Date().toISOString()
+      reviewNotes: reviewNotes || '',
+      reviewedBy: reviewer,
+      reviewedAt: new Date().toISOString(),
+      fineAmount: status === 'approved' ? (fineAmount || 0) : 0
     };
+
+    console.log('Violation reviewed:', {
+      id: violations[violationIndex].id,
+      status,
+      reviewer,
+      fineAmount: violations[violationIndex].fineAmount
+    });
 
     res.json({
       success: true,
@@ -162,8 +226,17 @@ app.get('/api/statistics', (req, res) => {
       approved: violations.filter(v => v.status === 'approved').length,
       rejected: violations.filter(v => v.status === 'rejected').length,
       avgConfidence: violations.length > 0 
-        ? violations.reduce((sum, v) => sum + v.aiAnalysis.confidence, 0) / violations.length 
-        : 0
+        ? violations.reduce((sum, v) => sum + (v.aiAnalysis?.confidence || 0), 0) / violations.length 
+        : 0,
+      totalFines: violations
+        .filter(v => v.status === 'approved')
+        .reduce((sum, v) => sum + (v.fineAmount || 0), 0),
+      recentSubmissions: violations
+        .filter(v => {
+          const submittedAt = new Date(v.submittedAt);
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          return submittedAt > oneDayAgo;
+        }).length
     };
 
     res.json({
@@ -178,13 +251,81 @@ app.get('/api/statistics', (req, res) => {
   }
 });
 
+// Upload evidence file (for direct file uploads)
+app.post('/api/upload', upload.single('evidence'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+    }
+
+    // In production, upload to actual storage service
+    const fileUrl = `http://localhost:${PORT}/uploads/${req.file.originalname}`;
+    
+    res.json({
+      success: true,
+      url: fileUrl,
+      filename: req.file.originalname,
+      size: req.file.size
+    });
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to upload file'
+    });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'Backend server is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    violations: violations.length
   });
+});
+
+// Get violations by reporter
+app.get('/api/violations/reporter/:address', (req, res) => {
+  try {
+    const reporterAddress = req.params.address.toLowerCase();
+    const userViolations = violations.filter(v => 
+      v.reporterAddress && v.reporterAddress.toLowerCase() === reporterAddress
+    );
+
+    res.json({
+      success: true,
+      data: userViolations,
+      total: userViolations.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user violations'
+    });
+  }
+});
+
+// Get pending violations
+app.get('/api/violations/status/pending', (req, res) => {
+  try {
+    const pendingViolations = violations.filter(v => v.status === 'pending');
+    
+    res.json({
+      success: true,
+      data: pendingViolations,
+      total: pendingViolations.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch pending violations'
+    });
+  }
 });
 
 // Error handling middleware
@@ -207,4 +348,6 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
+  console.log(`🔍 Health check: http://localhost:${PORT}/health`);
+  console.log(`📝 Total violations in memory: ${violations.length}`);
 });

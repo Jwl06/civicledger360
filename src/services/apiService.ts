@@ -32,7 +32,8 @@ class ApiService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data;
     } catch (error) {
       console.error('Error submitting violation:', error);
       throw error;
@@ -41,31 +42,33 @@ class ApiService {
 
   async getViolationsByReporter(reporterAddress: string): Promise<any[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/violations/reporter/${reporterAddress}`);
+      const response = await fetch(`${API_BASE_URL}/violations?reporter=${reporterAddress}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data || [];
     } catch (error) {
       console.error('Error fetching user violations:', error);
-      throw error;
+      return [];
     }
   }
 
   async getPendingViolations(): Promise<any[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/violations/status/pending`);
+      const response = await fetch(`${API_BASE_URL}/violations?status=pending`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data || [];
     } catch (error) {
       console.error('Error fetching pending violations:', error);
-      throw error;
+      return [];
     }
   }
 
@@ -77,10 +80,11 @@ class ApiService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data || [];
     } catch (error) {
       console.error('Error fetching all violations:', error);
-      throw error;
+      return [];
     }
   }
 
@@ -98,7 +102,8 @@ class ApiService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data;
     } catch (error) {
       console.error('Error reviewing violation:', error);
       throw error;
@@ -113,9 +118,33 @@ class ApiService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result.data;
     } catch (error) {
       console.error('Error fetching statistics:', error);
+      return {};
+    }
+  }
+
+  async uploadEvidence(file: File, violationId: string): Promise<string> {
+    try {
+      const formData = new FormData();
+      formData.append('evidence', file);
+      formData.append('violationId', violationId);
+
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.url;
+    } catch (error) {
+      console.error('Error uploading evidence:', error);
       throw error;
     }
   }

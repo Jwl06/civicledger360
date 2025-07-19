@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CheckCircle, XCircle, Clock, Camera, MapPin, User, DollarSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle, XCircle, Clock, Camera, MapPin, User, DollarSign, RefreshCw, Eye } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useWeb3 } from '../contexts/Web3Context';
 import { ViolationStatus, ViolationType } from '../types';
@@ -12,6 +12,8 @@ const ViolationReview: React.FC = () => {
   const [fineAmount, setFineAmount] = useState<number>(0);
   const [reviewNotes, setReviewNotes] = useState<string>('');
   const [backendViolations, setBackendViolations] = useState<any[]>([]);
+  const [loadingBackend, setLoadingBackend] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const violationTypeLabels = {
     [ViolationType.HELMET_VIOLATION]: 'Helmet Violation',
@@ -22,18 +24,25 @@ const ViolationReview: React.FC = () => {
   };
 
   // Load violations from backend
-  React.useEffect(() => {
-    const loadBackendViolations = async () => {
-      try {
-        const violations = await apiService.getPendingViolations();
-        setBackendViolations(violations);
-      } catch (error) {
-        console.error('Error loading backend violations:', error);
-      }
-    };
+  const loadBackendViolations = async () => {
+    setLoadingBackend(true);
+    try {
+      const violations = await apiService.getPendingViolations();
+      console.log('Loaded violations from backend:', violations);
+      setBackendViolations(violations);
+      setLastRefresh(new Date());
+    } catch (error) {
+      console.error('Error loading backend violations:', error);
+      setBackendViolations([]);
+    } finally {
+      setLoadingBackend(false);
+    }
+  };
 
+  useEffect(() => {
     loadBackendViolations();
-    const interval = setInterval(loadBackendViolations, 30000); // Refresh every 30 seconds
+    // Refresh every 30 seconds
+    const interval = setInterval(loadBackendViolations, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -60,20 +69,24 @@ const ViolationReview: React.FC = () => {
       setReviewNotes('');
       
       // Refresh backend violations
-      const updatedViolations = await apiService.getPendingViolations();
-      setBackendViolations(updatedViolations);
+      await loadBackendViolations();
     } catch (error) {
       console.error('Review failed:', error);
       alert('Failed to review violation. Please try again.');
     }
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
+  const formatDate = (timestamp: number | string) => {
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : new Date(timestamp);
+    return date.toLocaleString();
   };
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const openEvidenceInNewTab = (url: string) => {
+    window.open(url, '_blank');
   };
 
   // Combine blockchain and backend violations
@@ -83,12 +96,12 @@ const ViolationReview: React.FC = () => {
       !pendingViolations.some(pv => pv.id === bv.id)
     ).map(bv => ({
       id: bv.id,
-      reporter: bv.reporter,
+      reporter: bv.reporterAddress || bv.reporter,
       vehicleId: bv.vehicleId,
       violationType: bv.violationType,
       description: bv.description,
-      ipfsHash: bv.evidenceUrl || bv.greenfieldUrl || '',
-      timestamp: bv.timestamp,
+      ipfsHash: bv.greenfieldUrl || bv.evidenceUrl || '',
+      timestamp: typeof bv.submittedAt === 'string' ? new Date(bv.submittedAt).getTime() : bv.timestamp,
       status: ViolationStatus.PENDING,
       reviewer: '',
       reviewTimestamp: 0,
@@ -102,10 +115,46 @@ const ViolationReview: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Review Violations</h1>
-        <p className="mt-2 text-gray-600">
-          Review and approve/reject violation reports from citizens
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Review Violations</h1>
+            <p className="mt-2 text-gray-600">
+              Review and approve/reject violation reports from citizens
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-sm text-gray-500">
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </div>
+            <button
+              onClick={loadBackendViolations}
+              disabled={loadingBackend}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loadingBackend ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <Clock className="h-5 w-5 text-blue-400" />
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-blue-800">
+              Real-time Backend Integration
+            </h3>
+            <div className="mt-2 text-sm text-blue-700">
+              <p>
+                Violations are automatically loaded from the backend API. Evidence photos are stored on BNB Greenfield 
+                and accessible for review. The system refreshes every 30 seconds to show new submissions.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {allPendingViolations.length === 0 ? (
@@ -115,6 +164,13 @@ const ViolationReview: React.FC = () => {
           <p className="mt-1 text-sm text-gray-500">
             All violation reports have been reviewed.
           </p>
+          <button
+            onClick={loadBackendViolations}
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Check for New Reports
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -174,25 +230,29 @@ const ViolationReview: React.FC = () => {
                   {violation.aiAnalysis && (
                     <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
                       <h4 className="text-sm font-medium text-blue-800 mb-2">AI Analysis</h4>
-                      <p className="text-sm text-blue-700">{violation.aiAnalysis.description}</p>
-                      <div className="mt-2 flex items-center justify-between text-xs text-blue-600">
-                        <span>Confidence: {(violation.aiAnalysis.confidence * 100).toFixed(1)}%</span>
-                        <span>Risk: {violation.aiAnalysis.riskLevel}</span>
+                      <div className="text-sm text-blue-700">
+                        <p>Confidence: {(violation.aiAnalysis.confidence * 100).toFixed(1)}%</p>
+                        <p>Detection: {violation.aiAnalysis.detectedViolation}</p>
+                        <p>Vehicle Detected: {violation.aiAnalysis.vehicleDetected ? 'Yes' : 'No'}</p>
                       </div>
                     </div>
                   )}
 
                   {violation.ipfsHash && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Camera className="h-4 w-4 mr-1" />
-                      <a 
-                        href={violation.ipfsHash} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline"
-                      >
-                        View Evidence
-                      </a>
+                    <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center text-sm text-green-700">
+                          <Camera className="h-4 w-4 mr-1" />
+                          <span>Evidence stored on Greenfield</span>
+                        </div>
+                        <button
+                          onClick={() => openEvidenceInNewTab(violation.ipfsHash)}
+                          className="inline-flex items-center px-2 py-1 border border-green-300 text-xs font-medium rounded text-green-700 bg-white hover:bg-green-50"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Evidence
+                        </button>
+                      </div>
                     </div>
                   )}
 
