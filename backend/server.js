@@ -10,23 +10,16 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage (replace with database in production)
+// In-memory storage for violations (replace with database in production)
 let violations = [];
-let violationCounter = 1;
+let violationIdCounter = 1;
 
 // Multer configuration for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image and video files are allowed'), false);
-    }
+    fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
 
@@ -34,190 +27,184 @@ const upload = multer({
 
 // Get all violations
 app.get('/api/violations', (req, res) => {
-  res.json(violations);
+  try {
+    res.json({
+      success: true,
+      data: violations,
+      total: violations.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch violations'
+    });
+  }
 });
 
-// Get violations by status
-app.get('/api/violations/status/:status', (req, res) => {
-  const { status } = req.params;
-  const filteredViolations = violations.filter(v => v.status === status);
-  res.json(filteredViolations);
-});
-
-// Get violations by reporter
-app.get('/api/violations/reporter/:address', (req, res) => {
-  const { address } = req.params;
-  const userViolations = violations.filter(v => 
-    v.reporter.toLowerCase() === address.toLowerCase()
-  );
-  res.json(userViolations);
+// Get violation by ID
+app.get('/api/violations/:id', (req, res) => {
+  try {
+    const violation = violations.find(v => v.id === parseInt(req.params.id));
+    if (!violation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Violation not found'
+      });
+    }
+    res.json({
+      success: true,
+      data: violation
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch violation'
+    });
+  }
 });
 
 // Submit new violation
-app.post('/api/violations', upload.single('evidence'), async (req, res) => {
+app.post('/api/violations', upload.single('evidence'), (req, res) => {
   try {
     const {
-      reporter,
-      vehicleId,
+      vehicleNumber,
       violationType,
-      description,
       location,
+      description,
+      reporterAddress,
       greenfieldUrl,
       blockchainTxHash
     } = req.body;
 
-    const violation = {
-      id: violationCounter++,
-      reporter,
-      vehicleId: parseInt(vehicleId),
-      violationType: parseInt(violationType),
-      description,
-      location,
-      evidenceUrl: greenfieldUrl,
-      blockchainTxHash,
-      timestamp: Date.now(),
-      status: 'pending',
-      reviewer: null,
-      reviewTimestamp: null,
-      fineAmount: 0,
-      isPaid: false,
-      aiAnalysis: null
+    // Simulate AI analysis
+    const aiAnalysis = {
+      confidence: Math.random() * 0.4 + 0.6, // 60-100% confidence
+      detectedViolation: violationType,
+      vehicleDetected: true,
+      locationVerified: true,
+      timestamp: new Date().toISOString()
     };
 
-    // Simulate AI analysis
-    if (greenfieldUrl) {
-      violation.aiAnalysis = await simulateAIAnalysis(violationType);
-    }
+    const newViolation = {
+      id: violationIdCounter++,
+      vehicleNumber,
+      violationType,
+      location,
+      description,
+      reporterAddress,
+      greenfieldUrl,
+      blockchainTxHash,
+      aiAnalysis,
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNotes: null
+    };
 
-    violations.push(violation);
+    violations.push(newViolation);
 
     res.status(201).json({
       success: true,
-      violation,
+      data: newViolation,
       message: 'Violation submitted successfully'
     });
   } catch (error) {
     console.error('Error submitting violation:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to submit violation',
-      error: error.message
+      error: 'Failed to submit violation'
     });
   }
 });
 
-// Update violation status (for officers)
+// Update violation status (for officer review)
 app.put('/api/violations/:id/review', (req, res) => {
   try {
-    const { id } = req.params;
-    const { status, reviewer, fineAmount, reviewNotes } = req.body;
+    const { status, reviewNotes, reviewerAddress } = req.body;
+    const violationIndex = violations.findIndex(v => v.id === parseInt(req.params.id));
 
-    const violationIndex = violations.findIndex(v => v.id === parseInt(id));
-    
     if (violationIndex === -1) {
       return res.status(404).json({
         success: false,
-        message: 'Violation not found'
+        error: 'Violation not found'
       });
     }
 
     violations[violationIndex] = {
       ...violations[violationIndex],
       status,
-      reviewer,
-      reviewTimestamp: Date.now(),
-      fineAmount: fineAmount || 0,
-      reviewNotes
+      reviewNotes,
+      reviewedBy: reviewerAddress,
+      reviewedAt: new Date().toISOString()
     };
 
     res.json({
       success: true,
-      violation: violations[violationIndex],
+      data: violations[violationIndex],
       message: 'Violation reviewed successfully'
     });
   } catch (error) {
     console.error('Error reviewing violation:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to review violation',
-      error: error.message
+      error: 'Failed to review violation'
     });
   }
 });
 
 // Get violation statistics
 app.get('/api/statistics', (req, res) => {
-  const stats = {
-    total: violations.length,
-    pending: violations.filter(v => v.status === 'pending').length,
-    approved: violations.filter(v => v.status === 'approved').length,
-    rejected: violations.filter(v => v.status === 'rejected').length,
-    totalFines: violations
-      .filter(v => v.status === 'approved')
-      .reduce((sum, v) => sum + v.fineAmount, 0),
-    recentViolations: violations
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 10)
-  };
+  try {
+    const stats = {
+      total: violations.length,
+      pending: violations.filter(v => v.status === 'pending').length,
+      approved: violations.filter(v => v.status === 'approved').length,
+      rejected: violations.filter(v => v.status === 'rejected').length,
+      avgConfidence: violations.length > 0 
+        ? violations.reduce((sum, v) => sum + v.aiAnalysis.confidence, 0) / violations.length 
+        : 0
+    };
 
-  res.json(stats);
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch statistics'
+    });
+  }
 });
 
-// Simulate AI analysis
-async function simulateAIAnalysis(violationType) {
-  const analyses = {
-    0: { // HELMET_VIOLATION
-      confidence: 0.85 + Math.random() * 0.15,
-      detectedObjects: ['motorcycle', 'rider', 'no_helmet'],
-      riskLevel: 'high',
-      description: 'AI detected motorcycle rider without helmet'
-    },
-    1: { // PLATE_TAMPERING
-      confidence: 0.75 + Math.random() * 0.20,
-      detectedObjects: ['vehicle', 'license_plate', 'tampering'],
-      riskLevel: 'medium',
-      description: 'AI detected potential license plate tampering'
-    },
-    2: { // SPEEDING
-      confidence: 0.90 + Math.random() * 0.10,
-      detectedObjects: ['vehicle', 'speed_indicator'],
-      riskLevel: 'high',
-      description: 'AI detected vehicle exceeding speed limit'
-    },
-    3: { // WRONG_PARKING
-      confidence: 0.80 + Math.random() * 0.15,
-      detectedObjects: ['vehicle', 'parking_zone', 'violation'],
-      riskLevel: 'low',
-      description: 'AI detected improper parking violation'
-    },
-    4: { // OTHER
-      confidence: 0.70 + Math.random() * 0.20,
-      detectedObjects: ['vehicle', 'traffic_violation'],
-      riskLevel: 'medium',
-      description: 'AI detected general traffic violation'
-    }
-  };
-
-  return analyses[violationType] || analyses[4];
-}
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Backend server is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Error handling middleware
 app.use((error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        message: 'File too large. Maximum size is 10MB.'
-      });
-    }
-  }
-  
+  console.error('Unhandled error:', error);
   res.status(500).json({
     success: false,
-    message: error.message || 'Internal server error'
+    error: 'Internal server error'
+  });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found'
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
+  console.log(`🚀 Backend server running on port ${PORT}`);
+  console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
 });

@@ -1,7 +1,7 @@
 {
-  "name": "civic-ledger-backend",
+  "name": "civic-violation-backend",
   "version": "1.0.0",
-  "description": "Backend API for CivicLedger 360",
+  "description": "Backend API for Civic Violation Reporting System",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
