@@ -77,16 +77,17 @@ npm run dev
 
 ### Wallet Setup
 1. Install MetaMask extension
-2. Add BNB Smart Chain Testnet
+2. Connect wallet (BSC Testnet will be added automatically)
 3. Get test BNB from faucet
-4. Connect wallet to the application
+4. Ensure you're on BSC Testnet (Chain ID: 97)
 
 ### Usage Flow
 1. **Connect Wallet**: Use MetaMask to connect
-2. **Register Vehicle**: Add vehicle details to blockchain
-3. **Report Violations**: Upload evidence and submit reports
-4. **Earn Rewards**: Get CIVIC tokens for approved reports
-5. **Track Progress**: Monitor dashboard for updates
+2. **Network Check**: Application automatically switches to BSC Testnet
+3. **Register Vehicle**: Add vehicle details to blockchain
+4. **Report Violations**: Upload evidence and submit reports
+5. **Earn Rewards**: Get CIVIC tokens for approved reports
+6. **Track Progress**: Monitor dashboard for updates
 
 ## 🔐 Security Features
 
@@ -127,6 +128,15 @@ For support and questions:
 - GitHub Issues: [Create an issue](https://github.com/your-repo/issues)
 - Documentation: [Wiki](https://github.com/your-repo/wiki)
 - Community: [Discord](https://discord.gg/your-discord)
+
+### Debug Steps:
+1. Check browser console for detailed error messages
+2. Verify contract deployment on BSC Testnet explorer
+3. Ensure MetaMask is connected to BSC Testnet (Chain ID: 97)
+4. Confirm contract addresses match deployed contracts
+5. Check that you have sufficient tBNB for gas fees
+
+## Production Considerations
 
 ---
 
