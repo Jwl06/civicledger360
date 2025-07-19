@@ -3,9 +3,9 @@ import { ethers, BrowserProvider } from 'ethers';
 
 // Contract addresses - UPDATE THESE AFTER DEPLOYMENT
 const CONTRACT_ADDRESSES = {
-  CIVIC_TOKEN: '0x0000000000000000000000000000000000000000', // Update with deployed address
-  VEHICLE_LEDGER: '0x0000000000000000000000000000000000000000', // Update with deployed address
-  VIOLATION_CHAIN: '0x0000000000000000000000000000000000000000' // Update with deployed address
+  CIVIC_TOKEN: '0x34683DAC607aF1e60f019552A672c33337133F64', // Update with deployed address
+  VEHICLE_LEDGER: '0x3274EB89645e982366fd0CBD4DA94EB45D59fc77', // Update with deployed address
+  VIOLATION_CHAIN: '0xf33bc070DC136064A2d438a5322a59EFfa5B88a4' // Update with deployed address
 };
 
 const CIVIC_TOKEN_ABI = [
